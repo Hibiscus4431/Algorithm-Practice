@@ -136,16 +136,34 @@ int main(int argc, char **argv)
     // Launch kernel with enough blocks to cover all missiles
     int blockSizr = 256;
     int gridSize = (N + blockSizr - 1) / blockSizr;
-    simulateKernel<<<gridSize, blockSizr>>>(d_missiles, N, dt, steps, g);
 
-    //cudeDeviceSynchronize timing would go here
+   // warmup or cudaDeviceSynchronize timing
+    simulateKernel<<<gridSize, blockSize>>>(d_missiles, N, dt, steps, g);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("Kernel launch failed: %s\n", cudaGetErrorString(err));
+        cudaFree(d_missiles);
+        return 1;
+    }
+    cudaDeviceSynchronize();
 
-    cudeMemcpy(h_missiles.data(), d_missiles, bytes, cudeMemcpyDeviceToHost);
+    // Copy back
+    cudaMemcpy(h_missiles.data(), d_missiles, bytes, cudaMemcpyDeviceToHost);
+
+    //Save results to CSV file (final positions and velocities)
+    std::ofstream out("missiles_results.csv");
+    out << "id,x,y,vx,vy,mass,drag_k,thrust_x,thrust_y\n";
+    for (int i = 0; i < N; ++i)
+    {
+        auto &m = h_missiles[i];
+        out << i << "," << m.x << "," << m.y << "," << m.vx << "," 
+        << m.vy << "," << m.mass << "," << m.drag_k << "," 
+        << m.thrust_x << "," << m.thrust_y << "\n";
+    }
+    out.close();
+
+    // Free device memory
     cudaFree(d_missiles);
-
-
+    printf
+    return 0;
 }
-
-// global__ void simulateKernel(Missile* missiles, int N, float dt, int steps, float g) {
-//   int idx = blockIdx.x * blockDim.x + threadIdx.x;
-//  if (idx >= N) return;
